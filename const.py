@@ -13,7 +13,7 @@ class parameter:
 		# MODE
 		self.data_log_mode = True
 		self.debug_mode = True
-		self.wt_log_mode = False
+		self.wt_log_mode = True
 
 		# CONTROL MODE
 		self.control_mode = 3

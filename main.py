@@ -18,6 +18,8 @@ from INA226 import INA226
 from smbus import SMBus
 from w1thermsensor import W1ThermSensor
 
+stop_thread = True
+
 sensor = W1ThermSensor()
 
 arduino = 0x04
@@ -46,6 +48,7 @@ target_point = np.genfromtxt(target_point_file,
                           encoding='utf-8')
 
 state_data_log = const.data_log_mode
+wt_log_mode = const.wt_log_mode
 if (state_data_log is True):
     # get date time object
     detail = datetime.datetime.now()
@@ -58,10 +61,11 @@ if (state_data_log is True):
     csvWriter.writerow(data_items)
 
     # open csv file
-    wt_file = open('./csv/'+ date +'_wt.csv', 'a', newline='')
-    wt_csvWriter = csv.writer(wt_file)
-    wt_data_items = ['count', 'wt']
-    wt_csvWriter.writerow(wt_data_items)
+    if wt_log_mode == True:
+        wt_file = open('./csv/'+ date +'_wt.csv', 'a', newline='')
+        wt_csvWriter = csv.writer(wt_file)
+        wt_data_items = ['wt']
+        wt_csvWriter.writerow(wt_data_items)
 
 # connect to the robot
 master = mavutil.mavlink_connection('udp:127.0.0.1:14551')
@@ -142,10 +146,14 @@ def calc_heading_diff(way_point):
     return diff_heading
 
 def kill_signal_process(arg1, args2):
-    pass
+    global stop_thread
+    if wt_log_mode == True:
+        stop_thread = False
+        print("KILL WT LOGGING PROCESS")
+        update_wt_thread.join()
+    exit(0)
 
-def logging(arg1, args2):
-    update_robot_state()
+def logging():
     v = power_sensor.get_voltage()
     c = power_sensor.get_current()
     p = power_sensor.get_power()
@@ -177,23 +185,29 @@ def calc_flexible_temp_goal(current_point, target_point, prev_target, r):
     return target_point
 
 def update_wt():
+    global stop_thread
     while True:
+        if stop_thread == False:
+            break
         temperature_in_celsius = sensor.get_temperature()
-        wt_data = [BIWAKO.count, temperature_in_celsius]
+        wt_data = [temperature_in_celsius]
         wt_log_data.append(wt_data)
         time.sleep(0.01)
 
+def signal_handler(signal, frame):
+    logging()
+    update_robot_state()
+
 ###############################################################################
 
-
-update_wt_thread = threading.Thread(target=update_wt)
-update_wt_thread.start()
+if wt_log_mode == True:
+    update_wt_thread = threading.Thread(target=update_wt)
+    update_wt_thread.start()
 
 if __name__ == '__main__':
 
     debug_mode = const.debug_mode
     wt_log_mode = const.wt_log_mode
-
     control_mode = const.control_mode
     if control_mode == 0:
         print('CONTROL MODE: OMNIDIRECTIONAL CONTROL')
@@ -249,7 +263,7 @@ if __name__ == '__main__':
     print("Arm/Disarm: Arm")
 
     try:
-        signal.signal(signal.SIGALRM, logging)
+        signal.signal(signal.SIGALRM, signal_handler)
         signal.setitimer(signal.ITIMER_REAL, 0.5, const.timer)
         start_time = time.time()
         ###########################################################################################
@@ -336,32 +350,33 @@ if __name__ == '__main__':
 
         master.arducopter_disarm()
         print("Arm/Disarm: Disarm")
-        signal.signal(signal.SIGALRM, kill_signal_process)
-        signal.setitimer(signal.ITIMER_REAL, 0.1, 0.1)
         if (state_data_log is True):
             print("Writing log")
             for i in range(len(log_data)):
                 csvWriter.writerow(log_data[i])
             file.close()
 
-            for j in range(len(wt_log_data)):
-                wt_csvWriter.writerow(wt_log_data[j])
-            wt_file.close()
-    except:
- 
+            if wt_log_mode == True:
+                for j in range(len(wt_log_data)):
+                    wt_csvWriter.writerow(wt_log_data[j])
+                wt_file.close()
+        signal.signal(signal.SIGALRM, kill_signal_process)
+        signal.setitimer(signal.ITIMER_REAL, 0.1, 0.1)
+    except KeyboardInterrupt:
         set_RC_mode()
         master.arducopter_disarm()
         print("Arm/Disarm: Disarm")
-        signal.signal(signal.SIGALRM, kill_signal_process)
-        signal.setitimer(signal.ITIMER_REAL, 0.1, 0.1)
         if (state_data_log is True):
             print("Writing log")
             for i in range(len(log_data)):
                 csvWriter.writerow(log_data[i])
             file.close()
-
-            for j in range(len(wt_log_data)):
-                wt_csvWriter.writerow(wt_log_data[j])
-            wt_file.close()
-        import traceback
-        traceback.print_exc()
+            
+            if wt_log_mode == True:
+                for j in range(len(wt_log_data)):
+                    wt_csvWriter.writerow(wt_log_data[j])
+                wt_file.close()
+        signal.signal(signal.SIGALRM, kill_signal_process)
+        signal.setitimer(signal.ITIMER_REAL, 0.1, 0.1)
+        # import traceback
+        # traceback.print_exc()
