@@ -46,7 +46,6 @@ def stay_action():
 
 def omni_control_action(diff_deg, diff_distance, latest_pwm):
     power = P_control(diff_distance)
-    # power = comp_pwm(power, latest_pwm)
     if -45.0 <= diff_deg < 45:
         action_num = 1
 

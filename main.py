@@ -127,11 +127,16 @@ def thruster_initialization(action):
         *rc_channel_values)                  # RC channel list, in microseconds.
     time.sleep(interval)
 
+# set RC mode
 def set_RC_mode():
     i2cbus.write_i2c_block_data(arduino, 0, [0, 0])
 
-def control_thruster(cmd):
-    i2cbus.write_i2c_block_data(arduino, 2, cmd)
+# send control command to arduino
+def control_thruster(cmd, same_pwm=False):
+    if same_pwm == False:
+        i2cbus.write_i2c_block_data(arduino, 2, cmd)
+    else:
+        pass
 
 # calculate heading difference between current point to target point
 def calc_heading_diff(way_point):
@@ -145,6 +150,7 @@ def calc_heading_diff(way_point):
                   - math.sin(t_lat)*math.cos(c_lat)*math.cos(d_lon), math.sin(d_lon)*math.cos(c_lat)))
     return diff_heading
 
+# kill signal process
 def kill_signal_process(arg1, args2):
     global stop_thread
     if wt_log_mode == True:
@@ -153,6 +159,7 @@ def kill_signal_process(arg1, args2):
         update_wt_thread.join()
     exit(0)
 
+# logging function
 def logging():
     v = power_sensor.get_voltage()
     c = power_sensor.get_current()
@@ -164,6 +171,7 @@ def logging():
             BIWAKO.cmd, BIWAKO.pwm, v, c, p, kJ, BIWAKO.consumed_energy, BIWAKO.diff_distance]
     log_data.append(data)
 
+# calculate the target point when the robot is in the simple strategy
 def calc_temp_target(current_point, target_point):
     current_point = np.array([current_point])
     target_point = np.array([target_point])
@@ -171,6 +179,7 @@ def calc_temp_target(current_point, target_point):
     temp_target = [temp_target[0][0], temp_target[0][1]]
     return temp_target
 
+# calculate the target point when the robot is in the flexible strategy
 def calc_flexible_temp_goal(current_point, target_point, prev_target, r):
     lat_t = target_point[0]
     lon_t = target_point[1]
@@ -184,6 +193,7 @@ def calc_flexible_temp_goal(current_point, target_point, prev_target, r):
     target_point = np.array([lat_temp_next, lon_temp_next])
     return target_point
 
+# update water temperature
 def update_wt():
     global stop_thread
     while True:
@@ -194,12 +204,12 @@ def update_wt():
         wt_log_data.append(wt_data)
         time.sleep(0.01)
 
+# signal handler
 def signal_handler(signal, frame):
     logging()
     update_robot_state()
 
-###############################################################################
-
+# update robot state thread
 if wt_log_mode == True:
     update_wt_thread = threading.Thread(target=update_wt)
     update_wt_thread.start()
@@ -232,19 +242,20 @@ if __name__ == '__main__':
     power_sensor = INA226(power_sensor_addr)
     power_sensor.initial_operation()
 
-    log_data = []
-    wt_log_data = []
-    action_log = [0, 0]
-    pwm_log = [0]
-    deg_e = [0]
-    is_first = 0
-    is_first_return = 0
-    way_point_num = 0
-    is_wait = 0
-    s_time = 0.0
-    wait_time = 0
-    base_time = [0.0]
+    log_data = [] # log data
+    wt_log_data = [] # water temperature log data
+    action_log = [0, 0] # action log
+    pwm_log = [0] # pwm log
+    deg_e = [0] # degree error log
+    is_first = 0 # flag for the first time to reach the target point
+    is_first_return = 0 # flag for the first time to reach the target point
+    way_point_num = 0 # waypoint number
+    is_wait = 0 # flag for waiting
+    s_time = 0.0 # start time
+    wait_time = 0 # wait time for the next action 
+    base_time = [0.0] # base time
     
+    # set timer
     monitoring_time = 60 * 5 #[sec]
     breaking_time = 60 * 60 * 0.5#[sec] 15 -> 35
     end_duration = 60 * 60 * 3 #[sec]
@@ -266,17 +277,22 @@ if __name__ == '__main__':
         signal.signal(signal.SIGALRM, signal_handler)
         signal.setitimer(signal.ITIMER_REAL, 0.5, const.timer)
         start_time = time.time()
-        ###########################################################################################
+
+        # srtart main loop
         while True:
             now = time.time()
             print("target point: ", way_point_num)
             print("duration: ", now - s_time)
             print("wait time: ", wait_time)
 
+            # if the duration is over, then finish the mission
             if now-start_time > end_duration+180:
                 print("Finish")
                 break
+
+            # update robot state
             pose = [BIWAKO.lon, BIWAKO.lat, BIWAKO.yaw]
+
             # decide the next action from current robot status and the next waypoint
             current_point = np.array([pose[1], pose[0]])
             print(current_point)
@@ -284,6 +300,7 @@ if __name__ == '__main__':
             diff_distance = round(mpu.haversine_distance(current_point, BIWAKO.next_goal), 5)*1000
             BIWAKO.diff_distance = diff_distance
 
+            # if the robot is close to the target point, then the robot will wait for a while
             if abs(diff_distance) < distance_tolerance:
                 if is_first == 0:
                     is_first = 1
@@ -293,7 +310,8 @@ if __name__ == '__main__':
                         wait_time = break_time # breaking time
                     else:
                         wait_time = monitoring_time
-
+                
+                # if the waiting time is over, then the robot will move to the next waypoint
                 if now - s_time > wait_time:
                     is_first = 0
                     way_point_num += 1
@@ -305,9 +323,11 @@ if __name__ == '__main__':
                         distance_tolerance = temp_target_distance_tolerance
                     BIWAKO.next_goal = target_point[way_point_num]
 
+                # stay action
                 action = actions.stay_action()
                 BIWAKO.cmd = action[0]
                 BIWAKO.pwm = action[1]
+                pwm_log.append(BIWAKO.pwm)
                 control_thruster(action)
                 action_log.append(action)
                 v = power_sensor.get_voltage()
@@ -316,7 +336,9 @@ if __name__ == '__main__':
                     print("LOW BATTERY!!!!!!!!")
                 time.sleep(0.03)
 
+            # if the robot is far from the target point, then the robot will move to the target point
             else:
+                # if the waiting time is over, then the robot will move to the next waypoint
                 if(is_first==1):
                     if now - s_time > wait_time:
                         is_first = 0
@@ -329,6 +351,7 @@ if __name__ == '__main__':
                             distance_tolerance = temp_target_distance_tolerance
                         BIWAKO.next_goal = target_point[way_point_num]
 
+                # calculate the next action
                 target_direction = math.radians(calculator.calculate_bearing(current_point, BIWAKO.next_goal))
                 diff_deg =  math.degrees(calculator.limit_angle(target_direction - current_yaw))
                 deg_e.append(diff_deg)
@@ -338,7 +361,11 @@ if __name__ == '__main__':
                 BIWAKO.cmd = action[0]
                 BIWAKO.pwm = action[1]
                 pwm_log.append(BIWAKO.pwm)
-                control_thruster(action)
+
+                # if pwm value is same as previous one, then do not send command to arduino
+                if pwm_log[-1] == pwm_log[-2]:
+                    same_pwm = True
+                control_thruster(action, same_pwm)
 
                 v = power_sensor.get_voltage()
                 if v < 11.3:
@@ -346,6 +373,7 @@ if __name__ == '__main__':
                     print("LOW BATTERY!!!!!!!!")
                 time.sleep(0.03)
 
+        # finish the mission
         set_RC_mode()
 
         master.arducopter_disarm()
@@ -362,6 +390,8 @@ if __name__ == '__main__':
                 wt_file.close()
         signal.signal(signal.SIGALRM, kill_signal_process)
         signal.setitimer(signal.ITIMER_REAL, 0.1, 0.1)
+
+    # if the program is interrupted by keyboard, then disarm the robot
     except KeyboardInterrupt:
         set_RC_mode()
         master.arducopter_disarm()
@@ -378,5 +408,3 @@ if __name__ == '__main__':
                 wt_file.close()
         signal.signal(signal.SIGALRM, kill_signal_process)
         signal.setitimer(signal.ITIMER_REAL, 0.1, 0.1)
-        # import traceback
-        # traceback.print_exc()
