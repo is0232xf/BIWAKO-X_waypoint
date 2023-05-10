@@ -362,9 +362,11 @@ if __name__ == '__main__':
                 BIWAKO.pwm = action[1]
                 pwm_log.append(BIWAKO.pwm)
 
-                # if pwm value is same as previous one, then do not send command to arduino
-                if pwm_log[-1] == pwm_log[-2]:
+                # if action is same as previous one, then do not send command to arduino
+                if action_log[-1] == action_log[-2]:
                     same_pwm = True
+                else:
+                    same_pwm = False
                 control_thruster(action, same_pwm)
 
                 v = power_sensor.get_voltage()
