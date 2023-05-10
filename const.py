@@ -33,3 +33,7 @@ class parameter:
 		self.heading_torelance = 5.0
 		self.duration = 10.0
 		self.timer = 0.10
+
+		self.monitoring_time = 60 * 5 #[sec] monitoring time at each way point
+		self.breaking_time = 60 * 60 * 0.5#[sec] frequency of one cycle
+		self.end_duration = 60 * 60 * 1 #[sec] end duration

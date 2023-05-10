@@ -256,9 +256,9 @@ if __name__ == '__main__':
     base_time = [0.0] # base time
     
     # set timer
-    monitoring_time = 60 * 5 #[sec]
-    breaking_time = 60 * 60 * 0.5#[sec] 15 -> 35
-    end_duration = 60 * 60 * 3 #[sec]
+    monitoring_time = const.monitoring_time #[sec]
+    breaking_time = const.breaking_time #[sec]
+    end_duration = const.end_duration #[sec]
         
     BIWAKO.next_goal = target_point[way_point_num]
 
