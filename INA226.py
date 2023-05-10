@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import smbus
+import time
 
 class INA226:
     def __init__(self, addr):
@@ -42,3 +43,14 @@ class INA226:
         p_result = self.bit_operation(p_word)
         self.power = p_result * 25.0 / 1000
         return self.power
+
+if __name__ == '__main__':
+    sensor = INA226(0x40)
+    sensor.initial_operation()
+    v_list = []
+    #  Get voltage value 20 times, calculate its average, and display it
+    for i in range(20):
+        v_list.append(sensor.get_voltage())
+        time.sleep(0.1)
+    # print just .2f
+    print("voltage: %.2f" % (sum(v_list) / len(v_list)))
